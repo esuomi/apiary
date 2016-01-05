@@ -1,0 +1,42 @@
+group 'io.induct.apiary'
+version '0.1.0'
+
+apply plugin: 'java'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+configurations {
+    provided
+}
+sourceSets {
+    main.compileClasspath += configurations.provided
+    test.compileClasspath += configurations.provided
+    test.runtimeClasspath += configurations.provided
+}
+dependencies {
+    compile "org.projectlombok:lombok:1.16.6"
+    compile "io.induct.http:http-core:0.2.0"
+    compile "io.induct.http:http-builders:0.2.0"
+    compile "io.induct.http:http-ning:0.2.0"
+    compile "io.induct.daniel:daniel-ioc-guice:0.4.0"
+    compile "javax.inject:javax.inject:1"
+    compile 'com.fasterxml.jackson.module:jackson-module-parameter-names:2.5.4'
+    compile group:'ch.qos.logback', name:'logback-classic', version:'1.0.13'
+    // required for the compiler to work with lombok and Java 8
+    compile files("${System.properties['java.home']}/../lib/tools.jar")
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+}
+
+task delombok {
+    description 'Delomboks the source code'
+    ant.taskdef(classname: 'lombok.delombok.ant.Tasks$Delombok', classpath: configurations.compile.asPath,  name: 'delombok')
+    ant.mkdir(dir: 'build/src-delomboked')
+    ant.delombok(verbose: 'true', encoding: 'UTF-8', to: 'build/src-delomboked', from: 'src/main/java')
+}
+[compileJava, compileTestJava]*.dependsOn delombok
