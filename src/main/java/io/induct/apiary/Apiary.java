@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ObjectArrays;
 import com.google.inject.Injector;
 import io.induct.http.builders.Request;
 
@@ -30,6 +31,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static io.induct.apiary.Client.*;
 
 /**
  * Apiary allows easy generation of HTTP API clients from interfaces marked with {@link Client} annotation.
@@ -60,18 +63,19 @@ public class Apiary extends ApiClient {
         return "    private static final TypeReference<" + returnType.getSimpleName() + "> mappingOf" + returnType.getSimpleName() + "Type = new TypeReference<" + returnType.getSimpleName() + ">() {};\n";
     };
 
-    public <T> T generateClient(Class<T> apiDefiningInterface) {
+    public <T> T generateClient(Class<T> apiDefiningInterface, String targetEnvironmentName) {
         Preconditions.checkNotNull(apiDefiningInterface, "Can not generate client implementation from null class");
         Preconditions.checkArgument(apiDefiningInterface.isInterface(), "Class must be an interface");
         Client clientConfig = apiDefiningInterface.getDeclaredAnnotation(Client.class);
         Preconditions.checkNotNull(clientConfig, "Class must be annotated with " + Client.class.getName());
+        Environment targetEnv = resolveEnv(apiDefiningInterface, targetEnvironmentName, clientConfig);
 
         String targetPackageName = clientConfig.targetPackage().replace("${root}", apiDefiningInterface.getPackage().getName());
         String targetClassName = clientConfig.targetClassName().replace("${clientName}", apiDefiningInterface.getSimpleName());
         String targetFqn = targetPackageName + "." + targetClassName;
 
         try {
-            String classSource = generateClassSource(apiDefiningInterface, targetPackageName, targetClassName);
+            String classSource = generateClassSource(apiDefiningInterface, targetPackageName, targetClassName, targetEnv);
 
             Path targetFile = createTargetFile(targetPackageName, targetClassName);
             Path sourceFile = saveToFile(targetFile, classSource);
@@ -81,6 +85,13 @@ public class Apiary extends ApiClient {
         } catch (ApiaryException ae) {
             throw new ApiaryException("Failed to generate client for API defining interface " + apiDefiningInterface, ae);
         }
+    }
+
+    private <T> Environment resolveEnv(Class<T> apiDefiningInterface, String targetEnvironmentName, Client clientConfig) {
+        Preconditions.checkNotNull(targetEnvironmentName, "You must specify the environment to run the client in");
+        Optional<Environment> possibleTargetEnvironment = Stream.of(clientConfig.environments()).filter(e -> e.name().equals(targetEnvironmentName)).findFirst();
+        Preconditions.checkArgument(possibleTargetEnvironment.isPresent(), "The interface " + apiDefiningInterface + " does not define an environment with name '" + targetEnvironmentName + "'");
+        return possibleTargetEnvironment.get();
     }
 
     private <T> T loadGeneratedClass(Path targetRoot, String targetFqn) {
@@ -146,7 +157,11 @@ public class Apiary extends ApiClient {
         }
     }
 
-    private <T> String generateClassSource(Class<T> apiDefiningInterface, String targetPackageName, String targetClassName) {
+    private <T> String generateClassSource(
+        Class<T> apiDefiningInterface,
+        String targetPackageName,
+        String targetClassName,
+        Environment env) {
         Client clientConfig = apiDefiningInterface.getDeclaredAnnotation(Client.class);
 
         String packageDefinition = "package " + targetPackageName + ";\n\n";
@@ -170,7 +185,7 @@ public class Apiary extends ApiClient {
 
         String staticFields = String.join("", findApiMethods(apiDefiningInterface).map(TYPE_REFERENCE_FIELDS_GENERATOR).collect(Collectors.toList()));
 
-        String methods = String.join(", ", generateMethods(findApiMethods(apiDefiningInterface), clientConfig.paramFormat()).collect(Collectors.toList()));
+        String methods = String.join(", ", generateMethods(findApiMethods(apiDefiningInterface), clientConfig.paramFormat(), env).collect(Collectors.toList()));
 
         return packageDefinition
                 + imports
@@ -180,7 +195,7 @@ public class Apiary extends ApiClient {
                 + "}\n";
     }
 
-    private Stream<String> generateMethods(Stream<Method> apiMethods, CaseFormat paramFormat) {
+    private Stream<String> generateMethods(Stream<Method> apiMethods, CaseFormat apiParamFormat, Environment env) {
         return apiMethods.map((methodRef) -> {
             StringBuilder methodSource = new StringBuilder();
             String returnTypeFqn = methodRef.getReturnType().getName();
@@ -195,12 +210,16 @@ public class Apiary extends ApiClient {
             methodSource.append(") {\n");
 
             methodSource.append("        Request request = createRequestBuilder()\n");
-            methodSource.append("                .withUrl(\"").append(methodRef.getAnnotation(Api.class).url()).append("\")\n");
+
+            Api apiConfig = methodRef.getAnnotation(Api.class);
+            String apiUrl = resolveApiUrl(env, apiConfig);
+
+            methodSource.append("                .withUrl(\"").append(apiUrl).append("\")\n");
             if (methodParams.length > 0) {
                 methodSource.append("                .withParams(params -> {\n");
                 for (Parameter param : methodParams) {
                     String methodParamName = param.getName();
-                    String apiParamName = CaseFormat.LOWER_CAMEL.to(paramFormat, methodParamName);
+                    String apiParamName = CaseFormat.LOWER_CAMEL.to(apiParamFormat, methodParamName);
                     if (param.getType().isAssignableFrom(Optional.class)) {
                         methodSource.append("                    if (").append(methodParamName).append(".isPresent()) {\n")
                             .append("                        params.put(\"")
@@ -223,6 +242,14 @@ public class Apiary extends ApiClient {
             methodSource.append("    }\n");
             return methodSource.toString();
         });
+    }
+
+    private <T> T firstNonNull(T first, T... more) {
+        return ObjectArrays.concat(first, more)[0];
+    }
+
+    private String resolveApiUrl(Environment targetEnv, Api apiConfig) {
+        return targetEnv.root() + apiConfig.path();
     }
 
     private <T> Stream<Method> findApiMethods(Class<T> apiDefiningInterface) {

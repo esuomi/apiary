@@ -7,6 +7,8 @@ import io.induct.apiary.Api;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import static io.induct.apiary.Client.Environment;
+
 /**
  * <a href="https://api.nasa.gov">NASA API</a> client definition.
  *
@@ -15,10 +17,18 @@ import java.util.Optional;
 @Client(
     paramFormat = CaseFormat.LOWER_UNDERSCORE,
     targetPackage = "${root}.generated",
-    targetClassName = "${clientName}Impl"
+    targetClassName = "${clientName}Impl",
+    environments = {
+        @Environment(name = "local", root = "http://localhost:9090"),
+        @Environment(name = "live", root = "https://api.nasa.gov")
+    }
 )
 public interface NASA {
 
-    @Api(url = "https://api.nasa.gov/planetary/apod")
-    ApodImage apod(Optional<LocalDate> date, Optional<Boolean> conceptTags, Optional<Boolean> hd, String apiKey);
+    @Api(path = "/planetary/apod")
+    ApodImage apod(
+        Optional<LocalDate> date,
+        Optional<Boolean> conceptTags,
+        Optional<Boolean> hd,
+        String apiKey);
 }
