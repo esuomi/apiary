@@ -18,6 +18,7 @@ import java.io.InputStream;
  *
  * @since 1.1.2016
  */
+@SuppressWarnings({"WeakerAccess", "unused"})
 public abstract class ApiClient {
     private final Logger log = LoggerFactory.getLogger(ApiClient.class);
 

@@ -1,7 +1,5 @@
 package io.induct.apiary;
 
-import com.google.common.collect.Lists;
-
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 import java.util.Collections;
@@ -10,7 +8,7 @@ import java.util.List;
 /**
  * @since 3.1.2016
  */
-public class ClientCompilationException extends ApiaryException {
+class ClientCompilationException extends ApiaryException {
     private final List<Diagnostic<? extends JavaFileObject>> diagnostics;
 
     public ClientCompilationException(String message, Throwable throwable) {
@@ -23,6 +21,7 @@ public class ClientCompilationException extends ApiaryException {
         this.diagnostics = diagnostics;
     }
 
+    @SuppressWarnings("unused")
     public List<Diagnostic<? extends JavaFileObject>> getDiagnostics() {
         return diagnostics;
     }

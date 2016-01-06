@@ -33,7 +33,7 @@ import java.util.stream.Stream;
 
 /**
  * Apiary allows easy generation of HTTP API clients from interfaces marked with {@link Client} annotation.
- * To be usable, the interface has to have at least one {@Api} annotated method.
+ * To be usable, the interface has to have at least one {@link Api} annotated method.
  *
  * @since 1.1.2016
  * @see Client
@@ -86,6 +86,7 @@ public class Apiary extends ApiClient {
     private <T> T loadGeneratedClass(Path targetRoot, String targetFqn) {
         try {
             URLClassLoader classLoader = new URLClassLoader(new URL[]{ targetRoot.toUri().toURL() });
+            @SuppressWarnings("unchecked")
             Class<T> cls = (Class<T>) classLoader.loadClass(targetFqn);
             return injector.getInstance(cls);
         } catch (MalformedURLException | ClassNotFoundException e) {
@@ -218,7 +219,7 @@ public class Apiary extends ApiClient {
             }
 
             methodSource.append("                .build();\n");
-            methodSource.append("        return handleApiCall(request, mappingOf" + methodRef.getReturnType().getSimpleName() + "Type);\n");
+            methodSource.append("        return handleApiCall(request, mappingOf").append(methodRef.getReturnType().getSimpleName()).append("Type);\n");
             methodSource.append("    }\n");
             return methodSource.toString();
         });
