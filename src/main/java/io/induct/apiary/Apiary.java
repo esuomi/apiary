@@ -1,14 +1,11 @@
 package io.induct.apiary;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.google.common.base.CaseFormat;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ObjectArrays;
 import com.google.inject.Injector;
 import io.induct.apiary.annotations.Api;
 import io.induct.apiary.annotations.Client;
-import io.induct.http.builders.Request;
+import io.induct.apiary.generation.SourceGenerator;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -18,8 +15,6 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -30,11 +25,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static io.induct.apiary.annotations.Client.*;
+import static io.induct.apiary.annotations.Client.Environment;
 
 /**
  * Apiary allows easy generation of HTTP API clients from interfaces marked with {@link Client} annotation.
@@ -54,16 +47,14 @@ public class Apiary extends ApiClient {
 
     private final Path targetRoot;
 
+    private final SourceGenerator sourceGenerator;
+
     @Inject
-    public Apiary(@Named(GENERATED_DIR_KEY) String generatedDir, Injector injector) {
+    public Apiary(@Named(GENERATED_DIR_KEY) String generatedDir, Injector injector, SourceGenerator sourceGenerator) {
+        this.sourceGenerator = sourceGenerator;
         this.targetRoot = fs.getPath(generatedDir);
         this.injector = injector;
     }
-
-    private static final Function<Method, String> TYPE_REFERENCE_FIELDS_GENERATOR = (method) -> {
-        Class<?> returnType = method.getReturnType();
-        return "    private static final TypeReference<" + returnType.getSimpleName() + "> mappingOf" + returnType.getSimpleName() + "Type = new TypeReference<" + returnType.getSimpleName() + ">() {};\n";
-    };
 
     public <T> T generateClient(Class<T> apiDefiningInterface, String targetEnvironmentName) {
         Preconditions.checkNotNull(apiDefiningInterface, "Can not generate client implementation from null class");
@@ -77,7 +68,7 @@ public class Apiary extends ApiClient {
         String targetFqn = targetPackageName + "." + targetClassName;
 
         try {
-            String classSource = generateClassSource(apiDefiningInterface, targetPackageName, targetClassName, targetEnv);
+            String classSource = sourceGenerator.generateClassSource(apiDefiningInterface, targetPackageName, targetClassName, targetEnv);
 
             Path targetFile = createTargetFile(targetPackageName, targetClassName);
             Path sourceFile = saveToFile(targetFile, classSource);
@@ -158,105 +149,4 @@ public class Apiary extends ApiClient {
             throw new ClientGenerationException("Could not save generated source to " + targetFile, e);
         }
     }
-
-    private <T> String generateClassSource(
-        Class<T> apiDefiningInterface,
-        String targetPackageName,
-        String targetClassName,
-        Environment env) {
-        Client clientConfig = apiDefiningInterface.getDeclaredAnnotation(Client.class);
-
-        String packageDefinition = "package " + targetPackageName + ";\n\n";
-
-        Stream<Class> allImports = Stream.concat(
-                Stream.of(apiDefiningInterface, ApiClient.class, Request.class, TypeReference.class),
-                findApiMethods(apiDefiningInterface).map(Method::getReturnType)
-        );
-
-        String imports = String.join("", allImports
-                .map((cls) -> "import " + cls.getName() + ";\n")
-                .sorted()
-                .collect(Collectors.toList()));
-
-        String classDefinition = "\npublic class "
-                + targetClassName + " extends "
-                + ApiClient.class.getSimpleName()
-                + " implements "
-                + apiDefiningInterface.getSimpleName()
-                + " {\n";
-
-        String staticFields = String.join("", findApiMethods(apiDefiningInterface).map(TYPE_REFERENCE_FIELDS_GENERATOR).collect(Collectors.toList()));
-
-        String methods = String.join(", ", generateMethods(findApiMethods(apiDefiningInterface), clientConfig.paramFormat(), env).collect(Collectors.toList()));
-
-        return packageDefinition
-                + imports
-                + classDefinition
-                + staticFields
-                + methods
-                + "}\n";
-    }
-
-    private Stream<String> generateMethods(Stream<Method> apiMethods, CaseFormat apiParamFormat, Environment env) {
-        return apiMethods.map((methodRef) -> {
-            StringBuilder methodSource = new StringBuilder();
-            String returnTypeFqn = methodRef.getReturnType().getName();
-            methodSource.append("    public ").append(returnTypeFqn).append(" ").append(methodRef.getName()).append("(");
-
-            Parameter[] methodParams = methodRef.getParameters();
-            String params = String.join(", ", Stream.of(methodParams)
-                .map((param) -> param.getType().getName() + " " + param.getName())
-                .collect(Collectors.toList()));
-            methodSource.append(params);
-
-            methodSource.append(") {\n");
-
-            methodSource.append("        Request request = createRequestBuilder()\n");
-
-            Api apiConfig = methodRef.getAnnotation(Api.class);
-            String apiUrl = resolveApiUrl(env, apiConfig);
-
-            methodSource.append("                .withUrl(\"").append(apiUrl).append("\")\n");
-            if (methodParams.length > 0) {
-                methodSource.append("                .withParams(params -> {\n");
-                for (Parameter param : methodParams) {
-                    String methodParamName = param.getName();
-                    String apiParamName = CaseFormat.LOWER_CAMEL.to(apiParamFormat, methodParamName);
-                    if (param.getType().isAssignableFrom(Optional.class)) {
-                        methodSource.append("                    if (").append(methodParamName).append(".isPresent()) {\n")
-                            .append("                        params.put(\"")
-                            .append(apiParamName).append("\", ")
-                            .append("asString(").append(methodParamName).append(".get())")
-                            .append(");\n")
-                            .append("                    }\n");
-                    } else {
-                        methodSource.append("                    params.put(\"")
-                            .append(apiParamName).append("\", ")
-                            .append("asString(").append(methodParamName).append(")")
-                            .append(");\n");
-                    }
-                }
-                methodSource.append("                })\n");
-            }
-
-            methodSource.append("                .build();\n");
-            methodSource.append("        return handleApiCall(request, mappingOf").append(methodRef.getReturnType().getSimpleName()).append("Type);\n");
-            methodSource.append("    }\n");
-            return methodSource.toString();
-        });
-    }
-
-    private <T> T firstNonNull(T first, T... more) {
-        return ObjectArrays.concat(first, more)[0];
-    }
-
-    private String resolveApiUrl(Environment targetEnv, Api apiConfig) {
-        return targetEnv.root() + apiConfig.path();
-    }
-
-    private <T> Stream<Method> findApiMethods(Class<T> apiDefiningInterface) {
-        return Stream.of(apiDefiningInterface.getDeclaredMethods())
-                .filter(m -> m.isAnnotationPresent(Api.class));
-    }
-
 }
