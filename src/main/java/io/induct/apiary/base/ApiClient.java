@@ -1,4 +1,4 @@
-package io.induct.apiary;
+package io.induct.apiary.base;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.base.Optional;

@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.Injector;
 import io.induct.apiary.annotations.Api;
 import io.induct.apiary.annotations.Client;
+import io.induct.apiary.base.ApiClient;
 import io.induct.apiary.generation.SourceGenerator;
 
 import javax.inject.Inject;

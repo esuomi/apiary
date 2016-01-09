@@ -2,7 +2,7 @@ package io.induct.apiary.generation;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.base.CaseFormat;
-import io.induct.apiary.ApiClient;
+import io.induct.apiary.base.ApiClient;
 import io.induct.apiary.annotations.Api;
 import io.induct.apiary.annotations.Client;
 import io.induct.http.builders.Request;
