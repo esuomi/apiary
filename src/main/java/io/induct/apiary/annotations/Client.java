@@ -1,4 +1,4 @@
-package io.induct.apiary;
+package io.induct.apiary.annotations;
 
 import com.google.common.base.CaseFormat;
 

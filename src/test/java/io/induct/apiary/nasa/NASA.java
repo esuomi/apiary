@@ -1,13 +1,13 @@
 package io.induct.apiary.nasa;
 
 import com.google.common.base.CaseFormat;
-import io.induct.apiary.Client;
-import io.induct.apiary.Api;
+import io.induct.apiary.annotations.Client;
+import io.induct.apiary.annotations.Api;
 
 import java.time.LocalDate;
 import java.util.Optional;
 
-import static io.induct.apiary.Client.Environment;
+import static io.induct.apiary.annotations.Client.Environment;
 
 /**
  * <a href="https://api.nasa.gov">NASA API</a> client definition.

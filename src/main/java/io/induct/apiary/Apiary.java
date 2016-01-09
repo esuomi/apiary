@@ -6,6 +6,8 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ObjectArrays;
 import com.google.inject.Injector;
+import io.induct.apiary.annotations.Api;
+import io.induct.apiary.annotations.Client;
 import io.induct.http.builders.Request;
 
 import javax.inject.Inject;
@@ -32,7 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static io.induct.apiary.Client.*;
+import static io.induct.apiary.annotations.Client.*;
 
 /**
  * Apiary allows easy generation of HTTP API clients from interfaces marked with {@link Client} annotation.
